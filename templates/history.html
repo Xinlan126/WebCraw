@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Search History{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col">
+        <h2 class="mb-4">Search History</h2>
+        {% if crawls %}
+            <div class="list-group">
+                {% for crawl in crawls %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between">
+                            <h5>{{ crawl.url }}</h5>
+                            <small class="text-muted">{{ crawl.timestamp.strftime('%Y-%m-%d %H:%M') }}</small>
+                        </div>
+                        <p class="mb-1">Level {{ crawl.level }} Crawl</p>
+                        {% if crawl.pdfs %}
+                            <div class="mt-2">
+                                <h6>Found PDFs:</h6>
+                                <ul class="list-group">
+                                    {% for pdf in crawl.pdfs %}
+                                        <li class="list-group-item">
+                                            <a href="{{ url_for('download_pdf', filename=pdf.filename) }}" 
+                                               class="text-decoration-none">
+                                                {{ pdf.filename }}
+                                            </a>
+                                            <div class="mt-1">
+                                                <small>Top words: {{ pdf.word_stats|join(', ') }}</small>
+                                            </div>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% else %}
+                            <p class="text-muted">No PDFs found in this crawl</p>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="text-muted">No search history available</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
