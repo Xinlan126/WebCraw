@@ -1,29 +1,25 @@
+import base64
 import hashlib
-import json
-
-from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, stream_with_context, Response
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-from flask_mail import Mail, Message
-from werkzeug.security import generate_password_hash, check_password_hash
-from itsdangerous import URLSafeTimedSerializer
+import logging
 import os
 import re
 import uuid
-from datetime import datetime, timedelta
-import requests
-from bs4 import BeautifulSoup
-from urllib.parse import urlparse
-import PyPDF2
-from io import BytesIO
-from wordcloud import WordCloud
-import base64
-import validators
 from collections import Counter
-import uuid
-import logging
-import tldextract
+from datetime import datetime, timedelta
+from io import BytesIO
+
+import PyPDF2
 import requests
+import tldextract
+import validators
+from bs4 import BeautifulSoup
+from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_mail import Mail, Message
+from flask_sqlalchemy import SQLAlchemy
+from itsdangerous import URLSafeTimedSerializer
+from werkzeug.security import generate_password_hash, check_password_hash
+from wordcloud import WordCloud
 
 app = Flask(__name__)
 app.config.from_pyfile('config.py')
@@ -130,18 +126,6 @@ def generate_content_hash(content):
     return hashlib.md5(content).hexdigest()
 
 
-# def generate_wordcloud_data(pdf_ids):
-#     text = ""
-#     for pdf_id in pdf_ids:
-#         pdf = PDFDocument.query.get(pdf_id)
-#         with open(os.path.join(app.config['UPLOAD_FOLDER'], pdf.filename), 'rb') as f:
-#             pdf_content = f.read()
-#             pdf_reader = PyPDF2.PdfReader(BytesIO(pdf_content))
-#             for page in pdf_reader.pages:
-#                 text += page.extract_text()
-#     return generate_wordcloud(text)
-
-
 def generate_wordcloud(text):
     """Generate wordcloud image from text"""
     if not text.strip():
@@ -164,8 +148,7 @@ def generate_wordcloud(text):
     wordcloud.generate(filtered_text)
 
     # Convert to base64 for embedding in HTML
-    import io
-    img = io.BytesIO()
+    img = BytesIO()
     wordcloud.to_image().save(img, format='PNG')
     img.seek(0)
     return base64.b64encode(img.getvalue()).decode('utf-8')
@@ -189,11 +172,10 @@ def generate_wordcloud_data(pdf_ids):
     return generate_wordcloud(text)
 
 
-def crawl_website(url, max_level, progress_callback=None):
+def crawl_website(url, max_level):
     results = {'pdfs': [], 'error': None}
     visited = set()
     base_domain = get_domain(url)
-
 
     def should_crawl(target_url, current_level):
         """Determine if URL should be crawled based on level"""
@@ -206,14 +188,11 @@ def crawl_website(url, max_level, progress_callback=None):
         return True  # Level 3
 
     def process_page(page_url, current_level):
-        if page_url in visited:
+        if current_level > max_level or page_url in visited:
             return
         visited.add(page_url)
 
         try:
-            if progress_callback:
-                progress_callback(page_url, results['pdfs'])
-
             response = requests.get(
                 page_url,
                 timeout=10,
@@ -259,25 +238,20 @@ def crawl_website(url, max_level, progress_callback=None):
                                     'word_stats': word_stats,
                                     'content_hash': content_hash
                                 })
-                                if progress_callback:
-                                    progress_callback(page_url, results['pdfs'])
 
             # Recursive crawling
-            # if current_level < max_level:
-            #     for link in soup.find_all('a', href=True):
-            #         next_url = requests.compat.urljoin(page_url, link['href'])
-            #         if should_crawl(next_url, current_level):
-            #             process_page(next_url, current_level + 1)
+            if current_level < max_level:
+                for link in soup.find_all('a', href=True):
+                    next_url = requests.compat.urljoin(page_url, link['href'])
+                    if should_crawl(next_url, current_level):
+                        process_page(next_url, current_level + 1)
 
         except Exception as e:
             logger.error(f"Error processing {page_url}: {str(e)}")
             if not results['error']:
                 results['error'] = str(e)
-                if progress_callback:
-                    progress_callback(page_url, results['pdfs'], e)
 
-    # Start crawling at level 1
-    process_page(url, 1)
+    process_page(url, 0)
     return results
 
 
@@ -451,7 +425,9 @@ def profile():
 @app.route('/search', methods=['GET', 'POST'])
 @login_required
 def search():
-    if request.method == 'POST':
+    if request.method == 'GET':
+        return render_template('search.html')
+    else:
         url = request.form.get('url')
         level = int(request.form.get('level', 1))
 
@@ -461,10 +437,7 @@ def search():
 
         try:
             crawl_results = crawl_website(url, level)
-            print(crawl_results)
-            if crawl_results['error']:
-                flash(f"Crawling error: {crawl_results['error']}", 'danger')
-            elif not crawl_results['pdfs']:
+            if not crawl_results['pdfs']:
                 flash('No PDFs found in the crawled pages', 'info')
             else:
                 search_log = SearchLog(
@@ -499,84 +472,6 @@ def search():
     return render_template('search.html')
 
 
-@app.route('/crawl_progress')
-@login_required
-def crawl_progress():
-    def generate():
-        url = request.args.get('url')
-        level = int(request.args.get('level', 1))
-
-        # Initialize progress tracking
-        progress = {
-            'status': 'starting',
-            'pages_crawled': 0,
-            'pdfs_found': 0,
-            'current_url': '',
-            'message': ''
-        }
-
-        yield f"data: {json.dumps(progress)}\n\n"
-
-        try:
-            # Create a callback function that updates and yields progress
-            def progress_callback(current_url, pdfs, error=None):
-                nonlocal progress
-                progress.update({
-                    'pages_crawled': progress['pages_crawled'] + 1,
-                    'current_url': current_url,
-                    'pdfs_found': len(pdfs),
-                    'status': 'error' if error else 'crawling',
-                    'message': str(error) if error else ''
-                })
-                yield f"data: {json.dumps(progress)}\n\n"
-
-            # Start crawling with a proper callback
-            crawl_results = crawl_website(
-                url,
-                level,
-                lambda current_url, pdfs, error=None: next(progress_callback(current_url, pdfs, error))
-            )
-
-            # Final update with completion status
-            progress.update({
-                'status': 'completed',
-                'pdfs_found': len(crawl_results['pdfs']),
-                'message': crawl_results['error'] if crawl_results['error'] else ''
-            })
-            yield f"data: {json.dumps(progress)}\n\n"
-
-            # Save the results to the database
-            if not crawl_results['error'] and crawl_results['pdfs']:
-                search_log = SearchLog(
-                    user_id=current_user.id,
-                    url=url,
-                    level=level
-                )
-                db.session.add(search_log)
-                db.session.commit()
-
-                for pdf in crawl_results['pdfs']:
-                    pdf_doc = PDFDocument(
-                        search_id=search_log.id,
-                        filename=pdf['filename'],
-                        original_url=pdf['url'],
-                        word_stats=pdf['word_stats'],
-                        content_hash=pdf['content_hash']
-                    )
-                    db.session.add(pdf_doc)
-
-                db.session.commit()
-
-        except Exception as e:
-            progress.update({
-                'status': 'error',
-                'message': str(e)
-            })
-            yield f"data: {json.dumps(progress)}\n\n"
-
-    return Response(stream_with_context(generate()), mimetype='text/event-stream')
-
-
 @app.route('/history')
 @login_required
 def history():
@@ -585,7 +480,6 @@ def history():
         .order_by(SearchLog.timestamp.desc()) \
         .all()
 
-    # If searching, we'll filter in the template to show matching PDFs
     return render_template('history.html',
                            searches=searches,
                            search_term=search_term)
