@@ -18,9 +18,13 @@ This web crawler application allows users to search websites, extract PDFs and a
 
 1. Clone the repository or extract the project files
 2. Open a command prompt in the project directory
-3. Build and run the application using Docker:
+3. Build and run the application using Docker (On Windows):
    ```
-   docker compose up
+   docker-compose build
+   ```
+Then, run with: 
+   ```
+   docker-compose up
    ```
 
 4. Access the application at http://localhost:5000
@@ -30,14 +34,14 @@ This web crawler application allows users to search websites, extract PDFs and a
 1. Press Ctrl+C in the command prompt
 2. Run:
    ```
-   docker compose down
+   docker-compose down
    ```
 
 ## Usage Guide
 
 ### Registration and Login
 
-1. Register a new account with your email, nickname, and password
+1. Register a new account with your email, nickname and password
 2. Login with your credentials
 3. Use the "Forgot Password" feature if needed
 
