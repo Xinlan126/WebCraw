@@ -50,7 +50,9 @@ Then, run with:
 1. Navigate to the Search page
 2. Enter a URL to crawl
 3. Select the crawl depth level (1-3)
-4. View the results, including any PDFs found
+* Please note: After 'Start Crawling' Button is clicked, please wait for few minutes until the crawling process finishes.
+* Since it doesn't crawl duplicated urls, you may need check or clear the database to make sure the input url was not crawled before.* 
+5. View the results, including any PDFs found
 
 ### PDF Analysis
 
