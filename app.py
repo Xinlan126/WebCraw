@@ -256,6 +256,7 @@ def crawl_website(url, max_level):
 
 
 # Routes
+@app.route('/index')
 @app.route('/')
 def index():
     return render_template('index.html')
