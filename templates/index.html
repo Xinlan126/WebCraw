@@ -9,8 +9,12 @@
         <p class="lead">Search websites and analyze PDF documents</p>
         {% if not current_user.is_authenticated %}
             <div class="mt-4">
-                <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg me-3">Login</a>
+                <a href="{{ url_for('login', next=request.endpoint) }}" class="btn btn-primary btn-lg me-3">Login</a>
                 <a href="{{ url_for('register') }}" class="btn btn-success btn-lg">Register</a>
+            </div>
+        {% else %}
+            <div class="mt-4">
+                <a href="{{ url_for('search') }}" class="btn btn-primary btn-lg me-3">Search</a>
             </div>
         {% endif %}
     </div>
